@@ -1,0 +1,3 @@
+Vendored unchanged from open-mmlab/mmdetection3d @ fe25f7a51d36e3702f961e198894580d83c4387b
+mmdet3d/evaluation/functional/kitti_utils/eval.py, Apache-2.0 (see LICENSE)
+sha256 eval.py 7e11cf61b807e8e5811dbf5dc9c5114e8c138c3cbc718cb21013844674768425
