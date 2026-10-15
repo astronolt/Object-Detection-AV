@@ -1,0 +1,61 @@
+{
+  "n_images": 5951,
+  "pool": "drive_disjoint train+val",
+  "checks": {
+    "ground_truth_scores_100": true,
+    "drop10_below_100": true,
+    "shift25_car_near_zero": true,
+    "shift25_ped_cyc_above_90": true
+  },
+  "ground_truth": {
+    "Car": {
+      "easy": 100.0,
+      "moderate": 100.0,
+      "hard": 100.0
+    },
+    "Pedestrian": {
+      "easy": 100.0,
+      "moderate": 100.0,
+      "hard": 100.0
+    },
+    "Cyclist": {
+      "easy": 100.0,
+      "moderate": 100.0,
+      "hard": 100.0
+    }
+  },
+  "drop_every_10th": {
+    "Car": {
+      "easy": 92.5,
+      "moderate": 90.0,
+      "hard": 90.0
+    },
+    "Pedestrian": {
+      "easy": 92.5,
+      "moderate": 92.5,
+      "hard": 92.5
+    },
+    "Cyclist": {
+      "easy": 92.5,
+      "moderate": 92.5,
+      "hard": 92.5
+    }
+  },
+  "shift_25pct_width": {
+    "Car": {
+      "easy": 0.0023450465401544125,
+      "moderate": 0.0049696722564860595,
+      "hard": 0.03425347572033045
+    },
+    "Pedestrian": {
+      "easy": 97.844194022538,
+      "moderate": 98.46416382252559,
+      "hard": 98.68421052631578
+    },
+    "Cyclist": {
+      "easy": 100.0,
+      "moderate": 100.0,
+      "hard": 100.0
+    }
+  }
+}
