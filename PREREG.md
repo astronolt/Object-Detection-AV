@@ -20,9 +20,14 @@ file governs, and section 8 lists every difference.
 Implemented in [scripts/make_split.py](scripts/make_split.py); run once and never re-rolled.
 
 1. Every image is mapped to its raw drive through `train_rand.txt` (1-based) → `train_mapping.txt`.
-2. Seed `20261015`; `10,000` candidates drawn in order from one `random.Random(seed)` stream. Each
+2. Seed `20261015`; 50 candidates drawn in order from one `random.Random(seed)` stream. Each
    candidate shuffles the sorted drive list, then assigns drives in that order, each to the partition
    whose image count is furthest below its 60/20/20 target. Ties go to train, then val, then test.
+   - Each start is then improved by deterministic best-improvement local search. A step moves one
+     drive or swaps two drives between partitions.
+   - A step is taken only if it lowers the key (image-share excess over 0.5 points, balance error,
+     sum of squared deviations). Ties go to the first step in sorted-drive order.
+   - The search stops when no step helps.
 3. Feasible means:
    - every partition's image share is within 0.5 percentage points of its target; and
    - in every partition, the Car, Pedestrian and Cyclist instance shares are within 1.2 percentage
@@ -35,6 +40,16 @@ Implemented in [scripts/make_split.py](scripts/make_split.py); run once and neve
 6. Files hold one zero-padded image id per line, ascending, LF endings. Images 006500 and 007250 are
    not hand-placed; Chapter 3 states where they land, and that a stock COCO model scored them once
    before this protocol existed.
+
+**Revision log.**
+
+- Attempt 1 (commit `1ffa88e`) used the same seed with 10,000 greedy candidates and no local search.
+  No candidate was feasible.
+  - The best balance error was 1.47 points, the median 15.9.
+  - The cause is cyclist clustering: the top 5 drives hold 49% of cyclists.
+  - The script wrote no files.
+- The procedure was revised to add the local search, and committed before attempt 2.
+- Neither attempt looked at images, models or results; both used label counts only.
 
 The old 3 October split cannot be rebuilt: the plan doc records no seed, no procedure and only a
 truncated test hash, and the files themselves were lost. The Day-1 gate "split hashes match" is

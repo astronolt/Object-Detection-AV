@@ -6,12 +6,17 @@ Procedure (PREREG.md section 2):
      random.Random(SEED) stream, then assign drives in that order, each to the partition
      whose image count is furthest below its target (60/20/20 of 7,481). Ties go to
      train, then val, then test.
-  3. A candidate is feasible if every partition's image share is within IMAGE_TOL_PP of
+  3. Revision 2 (attempt 1 found no feasible candidate): improve each start by deterministic
+     best-improvement local search. A step moves one drive to another partition or swaps two
+     drives in different partitions; it is taken only if it lowers the key
+     (image-share excess over IMAGE_TOL_PP, balance error, sum of squared deviations).
+     Ties between steps go to the first in sorted-drive order. Stop when no step helps.
+  4. A candidate is feasible if every partition's image share is within IMAGE_TOL_PP of
      its target, and every partition's Car, Pedestrian and Cyclist instance shares are
      within BALANCE_TOL_PP of that partition's image share.
-  4. Choose the feasible candidate with the smallest balance error; ties go to the smaller
+  5. Choose the feasible candidate with the smallest balance error; ties go to the smaller
      image-share error, then the lower candidate index.
-  5. Random-split control: the chosen train+val pool, shuffled by random.Random(SEED),
+  6. Random-split control: the chosen train+val pool, shuffled by random.Random(SEED),
      cut into the same train and val sizes. It shares the drive-disjoint test file.
 
 Usage: python -I scripts/make_split.py <kitti label_2 dir> <devkit mapping dir> <out dir>
@@ -28,7 +33,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from kitti.common import N_IMAGES, image_to_drive, is_moderate, read_all_labels, write_id_list  # noqa: E402
 
 SEED = 20261015
-N_CANDIDATES = 10_000
+N_CANDIDATES = 50  # revision 2; attempt 1 used 10,000 greedy-only candidates and none was feasible
 PARTS = ("train", "val", "test")
 TARGET = {"train": 0.60, "val": 0.20, "test": 0.20}
 IMAGE_TOL_PP = 0.5
@@ -47,6 +52,63 @@ def evaluate(assign, drive_imgs, drive_cls, totals):
     bal = max(abs(cls[p][c] / totals[c] - imgs[p] / N_IMAGES)
               for p in PARTS for c in BALANCE_CLASSES) * 100
     return img_err, bal
+
+
+def local_search(assign, drives, drive_imgs, drive_cls, totals):
+    """Best-improvement moves and swaps on (image excess, balance error, sum of squared deviations)."""
+    pi = {p: j for j, p in enumerate(PARTS)}
+    part = [pi[assign[d]] for d in drives]
+    n = [drive_imgs[d] for d in drives]
+    c = [[drive_cls[d][k] for k in BALANCE_CLASSES] for d in drives]
+    tot = [totals[k] for k in BALANCE_CLASSES]
+    tgt = [TARGET[p] for p in PARTS]
+    img = [0, 0, 0]
+    cls = [[0, 0, 0] for _ in PARTS]
+    for i, p in enumerate(part):
+        img[p] += n[i]
+        for k in range(3):
+            cls[p][k] += c[i][k]
+
+    def key(img, cls):
+        excess = max(0.0, max(abs(img[p] / N_IMAGES - tgt[p]) for p in range(3)) * 100 - IMAGE_TOL_PP)
+        devs = [cls[p][k] / tot[k] - img[p] / N_IMAGES for p in range(3) for k in range(3)]
+        return (excess, max(abs(v) for v in devs) * 100, sum(v * v for v in devs))
+
+    def shifted(moves):  # moves: list of (drive index, from, to)
+        im = img[:]
+        cl = [row[:] for row in cls]
+        for i, a, b in moves:
+            im[a] -= n[i]; im[b] += n[i]
+            for k in range(3):
+                cl[a][k] -= c[i][k]; cl[b][k] += c[i][k]
+        return key(im, cl)
+
+    current = key(img, cls)
+    while True:
+        best, best_moves = current, None
+        for i in range(len(drives)):
+            for q in range(3):
+                if q != part[i]:
+                    mv = [(i, part[i], q)]
+                    s = shifted(mv)
+                    if s < best:
+                        best, best_moves = s, mv
+        for i in range(len(drives)):
+            for j in range(i + 1, len(drives)):
+                if part[i] != part[j]:
+                    mv = [(i, part[i], part[j]), (j, part[j], part[i])]
+                    s = shifted(mv)
+                    if s < best:
+                        best, best_moves = s, mv
+        if best_moves is None:
+            break
+        for i, a, b in best_moves:
+            part[i] = b
+            img[a] -= n[i]; img[b] += n[i]
+            for k in range(3):
+                cls[a][k] -= c[i][k]; cls[b][k] += c[i][k]
+        current = best
+    return {d: PARTS[part[i]] for i, d in enumerate(drives)}
 
 
 def main(label_dir, mapping_dir, out_dir):
@@ -77,6 +139,7 @@ def main(label_dir, mapping_dir, out_dir):
             p = max(PARTS, key=lambda q: (target_n[q] - count[q], -PARTS.index(q)))
             assign[d] = p
             count[p] += drive_imgs[d]
+        assign = local_search(assign, drives, drive_imgs, drive_cls, totals)
         img_err, bal = evaluate(assign, drive_imgs, drive_cls, totals)
         candidates.append((bal, img_err, k, assign))
 
