@@ -1,8 +1,9 @@
-"""Run the pre-registered KITTI pipeline on Modal NVIDIA L4 GPUs (PREREG_AMENDMENT_2.md).
+"""Run the pre-registered KITTI pipeline on Modal NVIDIA L4 GPUs (PREREG_AMENDMENT_2.md, PREREG_AMENDMENT_3.md).
 
 Replaces colab/kitti_queue.ipynb. Every container clones the code from code.bundle at a git tag and runs
-the existing scripts unchanged. It refuses to run unless this file is the copy at that tag and scripts/,
-kitti/, configs/ and splits/ there are those of prereg-v1. Storage:
+the existing scripts. It refuses to run unless this file is the copy at that tag and scripts/, kitti/,
+configs/ and splits/ there are those of prereg-v1, apart from scripts/predict.py, which must be the copy
+amendment 3 records. Storage:
 
     volume kitti-msc            raw/        the official KITTI zips, downloaded once
                                 day1/       zip hashes, round-trip reports, overlay sheets
@@ -47,7 +48,7 @@ from pathlib import Path
 
 import modal
 
-TAG = "prereg-v1.2"
+TAG = "prereg-v1.3"
 BUNDLE = os.environ.get("KITTI_BUNDLE", "G:/My Drive/msc/code.bundle")
 
 # The runs of configs/recipe.py, in its order; checked against the tagged recipe whenever a launch starts.
@@ -68,6 +69,8 @@ STAGE_RE = re.compile(r"^(launch|rehearsal-\d{8}-\d{6})$")
 LAUNCH_LOCK = "launch"  # one lock for launches and rehearsals, so they never overlap
 FROZEN_TAG = "prereg-v1"  # PREREG_AMENDMENT_2 section 1: these folders are unchanged since this tag
 FROZEN_PATHS = ("scripts", "kitti", "configs", "splits")
+# PREREG_AMENDMENT_3: the one file changed since FROZEN_TAG, pinned by the SHA-256 of its LF-normalised text
+AMENDED = {"scripts/predict.py": "50807d48cd7fbe2c63e9ce531327acd3105a95f7ea1af5b47b23d1004b806da8"}
 
 VOL = Path("/vol")  # the shared volume
 RUN = Path("/runvol")  # a training container's own run volume
@@ -269,7 +272,8 @@ def run_logged(cmd, cwd, log_path, deadline=None, check_every=5.0, linger=60.0):
 
 def checkout(tag, strict=True):
     """Clone the bundle and check out the tag, exactly as cell 3 of the Colab notebook did. Unless strict is False,
-    refuse (WrapperMismatch) if scripts/, kitti/, configs/ or splits/ at the tag differ from prereg-v1."""
+    refuse (WrapperMismatch) if scripts/, kitti/, configs/ or splits/ at the tag differ from prereg-v1 other than
+    by the amended files of AMENDED."""
     if not (CODE / ".git").exists():
         sh(["git", "clone", "-q", BUNDLE_IN_CONTAINER, CODE])
     sh(["git", "-C", CODE, "checkout", "-q", tag])
@@ -283,14 +287,21 @@ def checkout(tag, strict=True):
 
 
 def frozen_problem(tag):
-    """None if scripts/, kitti/, configs/ and splits/ at the checked-out tag are those of prereg-v1."""
-    r = subprocess.run(["git", "-C", str(CODE), "diff", "--quiet", FROZEN_TAG, "HEAD", "--", *FROZEN_PATHS],
+    """None if scripts/, kitti/, configs/ and splits/ at the checked-out tag are those of prereg-v1, except that
+    each file of AMENDED must be the amended copy (PREREG_AMENDMENT_3)."""
+    skip = [f":(exclude){rel}" for rel in AMENDED]
+    r = subprocess.run(["git", "-C", str(CODE), "diff", "--quiet", FROZEN_TAG, "HEAD", "--", *FROZEN_PATHS, *skip],
                        capture_output=True, text=True)
-    if r.returncode == 0:
-        return None
-    return (f"{', '.join(p + '/' for p in FROZEN_PATHS)} at {tag} are not those of {FROZEN_TAG} (git diff exit "
-            f"code {r.returncode}{': ' + r.stderr.strip() if r.stderr.strip() else ''}); amendment 2 says they do "
-            "not change")
+    if r.returncode != 0:
+        return (f"{', '.join(p + '/' for p in FROZEN_PATHS)} at {tag} are not those of {FROZEN_TAG} (git diff exit "
+                f"code {r.returncode}{': ' + r.stderr.strip() if r.stderr.strip() else ''}); amendments 2 and 3 say "
+                f"they do not change, apart from {', '.join(AMENDED)}")
+    for rel, want in AMENDED.items():
+        f = CODE / rel
+        got = wrapper_sha256(f) if f.exists() else "missing"
+        if got != want:
+            return f"{rel} at {tag} ({got[:12]}) is not the copy amendment 3 records ({want[:12]})"
+    return None
 
 
 def wrapper_sha256(path):
