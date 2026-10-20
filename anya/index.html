@@ -199,7 +199,7 @@
   <section class="card about">
     <div>
       <h2>How Anya sees</h2>
-      <p>The <strong>study model</strong> is a YOLO11s detector fine-tuned on the KITTI benchmark, 7,481 road images recorded from a car in Karlsruhe, Germany. It looks for the four classes of the study: cars (with vans), pedestrians, cyclists and large vehicles (trucks and trams). On KITTI's validation images it reached an mAP@0.5 of 0.685 over these classes, and it runs in about 2 ms per image on an NVIDIA L4 GPU.</p>
+      <p>The <strong>study model</strong> is a YOLO11s detector fine-tuned on the KITTI benchmark, 7,481 road images recorded from a car in Karlsruhe, Germany. It looks for the four classes of the study: cars (with vans), pedestrians, cyclists and large vehicles (trucks and trams). On KITTI's validation images it reached an mAP@0.5 of 0.685 over these classes, and in the study's latency test it processed a frame in about 12 ms on an NVIDIA L4 GPU, about 80 frames a second.</p>
       <p>The <strong>general road model</strong> is a YOLO11m pretrained on the COCO dataset and not trained on KITTI. It knows motorcycles, buses, bicycles, traffic lights and stop signs as well, and Anya labels a person sitting on a motorcycle or bicycle as a rider.</p>
     </div>
     <div>
