@@ -1,4 +1,4 @@
-"""Run the pre-registered KITTI pipeline on Modal NVIDIA L4 GPUs (PREREG_AMENDMENT_2.md, PREREG_AMENDMENT_3.md).
+"""Run the pre-registered KITTI pipeline on Modal NVIDIA L4 GPUs (PREREG_AMENDMENT_2.md to PREREG_AMENDMENT_4.md).
 
 Replaces colab/kitti_queue.ipynb. Every container clones the code from code.bundle at a git tag and runs
 the existing scripts. It refuses to run unless this file is the copy at that tag and scripts/, kitti/,
@@ -10,6 +10,8 @@ amendment 3 records. Storage:
                                 runs/       smoke test, EPOCH_DECISION.json, launch.log, CUTOFF, calls.json,
                                             stops.json, and, after ::collect, every run in PREREG's layout
                                 rehearsal/  one folder per rehearsal, never used for results
+                                eval/       the freeze (FREEZE.json, validation predictions), latency, and test/,
+                                            the single test opening (TEST_OPENING.log, predictions, results)
     volume kitti-msc-<run id>   one per run, so each has a single writer: the run's queue log and folder
 
 Steps, from the project folder in Git Bash. prepare, smoke, rehearse and launch refuse to run without
@@ -24,6 +26,13 @@ Steps, from the project folder in Git Bash. prepare, smoke, rehearse and launch 
     python -m modal run cloud/kitti_modal.py::status                     progress at any time (--stage rehearsal)
     python -m modal run --detach cloud/kitti_modal.py::collect           gather the runs into kitti-msc/runs
     python -m modal volume get --force kitti-msc runs "G:/My Drive/msc"  download the results
+
+Evaluation (PREREG_AMENDMENT_4.md), after every run has ended. freeze, open_test and latency also need --detach.
+
+    python -m modal run --detach cloud/kitti_modal.py::freeze            validation predictions, thresholds, FREEZE
+    python -m modal volume get --force kitti-msc eval "G:/My Drive/msc"  copy the freeze for review
+    python -m modal run --detach cloud/kitti_modal.py::open_test         the single test opening (07:00-20:00 WAT)
+    python -m modal run --detach cloud/kitti_modal.py::latency           two latency sessions
 
 The headline run trains first; the other runs and E0 start together once it has completed and passed the
 halt rule. Running launch again is safe: it refuses while another launch, a rehearsal or a rehearsal's runs
@@ -43,12 +52,12 @@ import subprocess
 import sys
 import threading
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import modal
 
-TAG = "prereg-v1.3"
+TAG = "prereg-v1.4"
 BUNDLE = os.environ.get("KITTI_BUNDLE", "G:/My Drive/msc/code.bundle")
 
 # The runs of configs/recipe.py, in its order; checked against the tagged recipe whenever a launch starts.
@@ -134,13 +143,16 @@ PINS = [
     "ultralytics-platform==0.1.75", "ultralytics-thop==2.2.2", "ultralytics==8.4.171", "urllib3==2.8.0",
 ]
 
-image = (
+base_image = (
     modal.Image.debian_slim(python_version="3.12")
     .apt_install("git", "unzip", "wget", "libgl1", "libglib2.0-0")
     .pip_install(*PINS)
     .env({"PYTHONUNBUFFERED": "1"})
-    .add_local_file(BUNDLE, BUNDLE_IN_CONTAINER)
 )
+image = base_image.add_local_file(BUNDLE, BUNDLE_IN_CONTAINER)
+# PREREG_AMENDMENT_4 section 7: the vendored KITTI evaluator needs numba, which training never used.
+EVAL_PINS = ["numba==0.68.0", "llvmlite==0.50.0"]
+eval_image = base_image.pip_install(*EVAL_PINS).add_local_file(BUNDLE, BUNDLE_IN_CONTAINER)
 app = modal.App("kitti-msc")
 vol = modal.Volume.from_name("kitti-msc", create_if_missing=True)
 run_vols = {rid: modal.Volume.from_name(f"kitti-msc-{rid.lower()}", create_if_missing=True) for rid in RUN_IDS}
@@ -1790,6 +1802,127 @@ def collect_runs(tag: str):
     return {"time": now(), "git_commit": head, "cutoff": cutoff.isoformat() if cutoff else None, "runs": runs}
 
 
+# ---------------------------------------------------------------- evaluation (PREREG_AMENDMENT_4.md)
+
+EVAL = VOL / "eval"
+WAT = timezone(timedelta(hours=1))  # West Africa Time, which has no daylight saving
+DAYTIME_WAT = (7, 20)  # amendment 1: the test set is not opened overnight
+
+
+def runs_ended():
+    """Amendment 1: the freeze review starts when every run has ended. Each trained run must have COMPLETED, time-
+    stamped before the cut-off; E0 is scored by the evaluation itself."""
+    cutoff = read_time(shared_dir("launch") / "CUTOFF")
+    bad = []
+    for rid in RUN_IDS:
+        if rid == E0:
+            continue
+        done = read_time(RUNS_MNT / rid / rid / "COMPLETED")
+        if done is None or (cutoff is not None and done >= cutoff):
+            bad.append(rid)
+    if bad:
+        raise RuntimeError(f"These runs did not complete before the cut-off: {bad}")
+
+
+def eval_data(console, stamp):
+    """Images and labels on local disk through the pre-registered converter and its round-trip gate, and the
+    devkit's drive mapping for the bootstrap. Returns (label_2 directory, mapping directory)."""
+    EVAL.mkdir(parents=True, exist_ok=True)
+    unpack_and_convert(EVAL / f"roundtrip_eval_{stamp}.json", console, vol.commit)
+    sh(["unzip", "-qo", VOL / "raw" / "devkit_object.zip", "-d", RAW_LOCAL / "devkit"])
+    found = sorted((RAW_LOCAL / "devkit").rglob("train_rand.txt"))
+    if not found:
+        raise RuntimeError("devkit_object.zip holds no train_rand.txt")
+    return RAW_LOCAL / "training" / "label_2", found[0].parent
+
+
+def keep_console(console, dest):
+    if console.exists():
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(console, dest)
+
+
+@app.function(image=eval_image, gpu=GPU, cpu=(CPU, CPU), memory=MEMORY, volumes=ALL_VOLUMES, timeout=3 * 3600)
+def eval_freeze(tag: str):
+    """Validation predictions of every model, its confidence threshold and its validation scores (FREEZE.json)."""
+    head = checkout(tag)
+    check_wrapper()
+    data_step_passed()
+    reload_all()
+    runs_ended()
+    if (EVAL / "FREEZE.json").exists():
+        return {"note": "already frozen; FREEZE.json is never rewritten",
+                "summary": (EVAL / "FREEZE_SUMMARY.txt").read_text() if (EVAL / "FREEZE_SUMMARY.txt").exists() else ""}
+    gpu_check()
+    stamp = f"{datetime.now():%Y%m%d-%H%M%S}"
+    console = Path("/root/eval_console.log")
+    try:
+        run_logged([sys.executable, "evaluation/selfcheck.py"], cwd=CODE, log_path=console)
+        labels, _ = eval_data(console, stamp)
+        run_logged([sys.executable, "evaluation/freeze.py", "--data-root", DATA, "--label-dir", labels,
+                    "--runs-mnt", RUNS_MNT, "--out", EVAL], cwd=CODE, log_path=console)
+    finally:
+        keep_console(console, EVAL / f"freeze_console_{stamp}.log")
+        vol.commit()
+    return {"git_commit": head, "summary": (EVAL / "FREEZE_SUMMARY.txt").read_text()}
+
+
+@app.function(image=eval_image, gpu=GPU, cpu=(8.0, 8.0), memory=MEMORY, volumes=ALL_VOLUMES, timeout=4 * 3600)
+def eval_test(tag: str, boot: int = 1000):
+    """The single test opening: every frozen model and E0 on test.txt, scored, with the bootstrap."""
+    head = checkout(tag)
+    check_wrapper()
+    data_step_passed()
+    clock = datetime.now(WAT)
+    if not DAYTIME_WAT[0] <= clock.hour < DAYTIME_WAT[1]:
+        raise RuntimeError(f"It is {clock:%H:%M} WAT. Amendment 1: the test set is not opened overnight; open it "
+                           f"between {DAYTIME_WAT[0]:02d}:00 and {DAYTIME_WAT[1]:02d}:00 WAT.")
+    reload_all()
+    runs_ended()
+    if not (EVAL / "FREEZE.json").exists():
+        raise RuntimeError("There is no FREEZE.json: run ::freeze, and review it, before the test opening")
+    done = EVAL / "test" / "COMPLETED"
+    if done.exists():
+        return {"note": "the test set has already been opened; it is opened once",
+                "results_md": (EVAL / "test" / "results.md").read_text()}
+    gpu_check()
+    stamp = f"{datetime.now():%Y%m%d-%H%M%S}"
+    console = Path("/root/eval_console.log")
+    try:
+        labels, mapping = eval_data(console, stamp)
+        run_logged([sys.executable, "evaluation/open_test.py", "--data-root", DATA, "--label-dir", labels,
+                    "--mapping-dir", mapping, "--runs-mnt", RUNS_MNT, "--out", EVAL, "--boot", str(boot),
+                    "--workers", "8"], cwd=CODE, log_path=console)
+    finally:
+        keep_console(console, EVAL / f"test_console_{stamp}.log")
+        vol.commit()
+    return {"git_commit": head, "results_md": (EVAL / "test" / "results.md").read_text()}
+
+
+@app.function(image=eval_image, gpu=GPU, cpu=(CPU, CPU), memory=MEMORY, volumes=ALL_VOLUMES, timeout=2 * 3600,
+              single_use_containers=True)
+def eval_latency(tag: str, session: int):
+    """One latency session (PREREG.md section 6): every model back to back, in a container of its own."""
+    head = checkout(tag)
+    check_wrapper()
+    data_step_passed()
+    reload_all()
+    runs_ended()
+    gpu_check()
+    stamp = f"{datetime.now():%Y%m%d-%H%M%S}"
+    console = Path("/root/eval_console.log")
+    out = EVAL / f"latency_session{session}.json"
+    try:
+        EVAL.mkdir(parents=True, exist_ok=True)
+        unpack_and_convert(EVAL / f"roundtrip_latency{session}_{stamp}.json", console, vol.commit)
+        run_logged([sys.executable, "evaluation/latency.py", "--data-root", DATA, "--runs-mnt", RUNS_MNT,
+                    "--out", out, "--session", str(session)], cwd=CODE, log_path=console)
+    finally:
+        keep_console(console, EVAL / f"latency{session}_console_{stamp}.log")
+        vol.commit()
+    return {"git_commit": head, **read_json(out)}
+
+
 # ---------------------------------------------------------------- what you run from the laptop
 
 def detached():
@@ -1807,7 +1940,8 @@ def detached():
 
 
 def need_detach(step):
-    """prepare, smoke, the rehearsal and the launch must keep running when this window closes or the step returns."""
+    """prepare, smoke, the rehearsal, the launch and the evaluation steps must keep running when this window closes or
+    the step returns."""
     if detached():
         return True
     print("Not started. Run this step with --detach, or Modal stops it, and everything it started, as soon as this "
@@ -1931,3 +2065,37 @@ def collect(tag: str = TAG):
     for rid, r in res["runs"].items():
         print(f"  {rid:<22}{r['files']:>6} files   {r['state']}")
     print('Now download them: python -m modal volume get --force kitti-msc runs "G:/My Drive/msc"')
+
+
+@app.local_entrypoint()
+def freeze(tag: str = TAG):
+    if not need_detach("freeze"):
+        return
+    res = eval_freeze.remote(tag)
+    print(res.get("note", ""))
+    print(res.get("summary", ""))
+    print('Download the freeze for review: python -m modal volume get --force kitti-msc eval "G:/My Drive/msc"')
+
+
+@app.local_entrypoint()
+def open_test(tag: str = TAG, boot: int = 1000):
+    if not need_detach("open_test"):
+        return
+    res = eval_test.remote(tag, boot)
+    print(res.get("note", ""))
+    print(res.get("results_md", ""))
+    print('Download the results: python -m modal volume get --force kitti-msc eval "G:/My Drive/msc"')
+
+
+@app.local_entrypoint()
+def latency(tag: str = TAG):
+    if not need_detach("latency"):
+        return
+    for session in (1, 2):
+        res = eval_latency.remote(tag, session)
+        print(f"Session {session}: {res['environment']['gpu']}, driver {res['environment']['nvidia_smi']}, "
+              f"torch {res['environment']['torch']}, CUDA {res['environment']['cuda']}")
+        for label, r in res["models"].items():
+            ms = r["ms"]
+            print(f"  {label:<50} input {r['input_tensor_hw'][1]}x{r['input_tensor_hw'][0]}  inference mean "
+                  f"{ms['inference']['mean']:.2f} ms  total mean {ms['total']['mean']:.2f} ms  p95 {ms['total']['p95']:.2f} ms")

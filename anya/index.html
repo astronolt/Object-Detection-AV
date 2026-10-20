@@ -1,0 +1,506 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Anya – eyes on the road</title>
+<meta name="description" content="Anya finds cars, motorcycles, riders, pedestrians and other road users in photos, videos and a live camera view.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath d='M4 32C12 18 22 12 32 12s20 6 28 20c-8 14-18 20-28 20S12 46 4 32z' fill='%23008751'/%3E%3Ccircle cx='32' cy='32' r='11' fill='%23fff'/%3E%3Ccircle cx='32' cy='32' r='5' fill='%2314181c'/%3E%3C/svg%3E">
+<style>
+  :root {
+    --green: #008751; --green-ink: #006b40; --green-soft: #e3f3ec;
+    --ink: #14181c; --muted: #5b6670; --bg: #f4f6f5; --card: #ffffff; --line: #dfe5e2;
+    --danger: #b3261e; --danger-soft: #fdecea; --shadow: 0 1px 2px rgba(20,24,28,.06), 0 8px 24px rgba(20,24,28,.06);
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --green: #20b072; --green-ink: #7fd8ad; --green-soft: #15291f;
+      --ink: #e7ece9; --muted: #9aa7a0; --bg: #0e1311; --card: #161d1a; --line: #27322c;
+      --danger: #ffb4ab; --danger-soft: #3b1714; --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.25);
+      color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { background: var(--bg); color: var(--ink); font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+  a { color: var(--green-ink); }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 16px; }
+  header.top { border-bottom: 1px solid var(--line); background: var(--card); }
+  header.top .wrap { display: flex; align-items: center; gap: 14px; min-height: 68px; }
+  .brand { display: flex; align-items: center; gap: 12px; text-decoration: none; color: inherit; }
+  .brand svg { width: 44px; height: 44px; flex: none; }
+  .brand b { font-size: 26px; letter-spacing: .5px; }
+  .brand small { display: block; color: var(--muted); font-size: 13px; line-height: 1.2; }
+  .hero { padding: 28px 0 8px; }
+  .hero h1 { font-size: clamp(24px, 4vw, 34px); line-height: 1.2; margin: 0 0 8px; letter-spacing: -.3px; }
+  .hero p { margin: 0; color: var(--muted); max-width: 760px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow); padding: 20px; margin: 18px 0; }
+  .tabs { display: inline-flex; background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 4px; gap: 4px; margin-bottom: 18px; flex-wrap: wrap; }
+  .tabs button, .seg button { border: 0; background: transparent; color: var(--muted); font: inherit; font-weight: 600; padding: 8px 14px; border-radius: 9px; cursor: pointer; }
+  .tabs button[aria-selected="true"], .seg button[aria-pressed="true"] { background: var(--card); color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+  .seg button[disabled] { opacity: .45; cursor: not-allowed; }
+  .controls { display: grid; grid-template-columns: 1fr; gap: 16px; }
+  @media (min-width: 860px) { .controls { grid-template-columns: 1.3fr 1fr; align-items: start; } }
+  .label { font-size: 13px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; margin: 0 0 8px; }
+  .seg { display: flex; flex-wrap: wrap; gap: 4px; background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 4px; }
+  .seg button { flex: 1 1 auto; }
+  .model-note { color: var(--muted); font-size: 14px; margin: 8px 2px 0; }
+  .slider { display: flex; align-items: center; gap: 12px; }
+  .slider input { flex: 1; accent-color: var(--green); }
+  .slider output { font-variant-numeric: tabular-nums; font-weight: 700; min-width: 42px; text-align: right; }
+  .drop { display: block; border: 2px dashed var(--line); border-radius: 14px; padding: 26px 16px; text-align: center; cursor: pointer; transition: border-color .15s, background .15s; background: var(--bg); }
+  .drop:hover, .drop.over { border-color: var(--green); background: var(--green-soft); }
+  .drop svg { width: 40px; height: 40px; color: var(--green); display: block; margin: 0 auto; }
+  .drop strong { display: block; margin-top: 6px; }
+  .drop span { color: var(--muted); font-size: 14px; }
+  .preview { margin-top: 14px; display: none; align-items: center; gap: 14px; flex-wrap: wrap; }
+  .preview.show { display: flex; }
+  .preview img, .preview video { max-height: 120px; max-width: 220px; border-radius: 10px; border: 1px solid var(--line); background: #000; }
+  .preview .meta { font-size: 14px; color: var(--muted); word-break: break-all; }
+  .actions { display: flex; align-items: center; gap: 12px; margin-top: 18px; flex-wrap: wrap; }
+  .btn { appearance: none; border: 0; border-radius: 12px; padding: 12px 22px; font: inherit; font-weight: 700; cursor: pointer; background: var(--green); color: #fff; }
+  .btn:hover { filter: brightness(1.06); }
+  .btn[disabled] { opacity: .5; cursor: not-allowed; filter: none; }
+  .btn.ghost { background: transparent; color: var(--ink); border: 1px solid var(--line); }
+  .status { color: var(--muted); font-size: 14px; }
+  .bar { height: 6px; background: var(--line); border-radius: 99px; overflow: hidden; flex: 1 1 160px; min-width: 120px; display: none; }
+  .bar.show { display: block; }
+  .bar i { display: block; height: 100%; width: 0; background: var(--green); transition: width .2s; }
+  .bar.busy i { width: 35%; animation: slide 1.1s infinite ease-in-out; }
+  @keyframes slide { 0% { transform: translateX(-100%); } 100% { transform: translateX(300%); } }
+  .error { display: none; margin-top: 14px; background: var(--danger-soft); color: var(--danger); border-radius: 10px; padding: 10px 14px; font-size: 15px; }
+  .error.show { display: block; }
+  .results { display: grid; gap: 18px; grid-template-columns: 1fr; }
+  @media (min-width: 900px) { .results.two { grid-template-columns: 1fr 1fr; } }
+  .result h3 { margin: 0 0 2px; font-size: 18px; }
+  .result .sub { color: var(--muted); font-size: 14px; margin-bottom: 12px; }
+  .result img, .result video { width: 100%; height: auto; display: block; border-radius: 12px; border: 1px solid var(--line); background: #000; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .chip { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 99px; border: 1px solid var(--line); background: var(--bg); font-weight: 600; font-size: 14px; }
+  .chip i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+  .chip.none { color: var(--muted); font-weight: 500; }
+  .stats { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 14px; }
+  .stats th, .stats td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); }
+  .stats th { color: var(--muted); font-weight: 600; }
+  .stats td.n { text-align: right; font-variant-numeric: tabular-nums; }
+  .stats th.n { text-align: right; }
+  .foot-note { color: var(--muted); font-size: 13px; margin-top: 10px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 8px 14px; font-size: 14px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+  .live-stage { position: relative; width: 100%; max-width: 900px; margin: 14px 0 0; border-radius: 12px; overflow: hidden; background: #000; display: none; }
+  .live-stage.show { display: block; }
+  .live-stage video { width: 100%; height: auto; display: block; }
+  .live-stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .live-hud { position: absolute; left: 10px; top: 10px; background: rgba(0,0,0,.6); color: #fff; font-size: 13px; padding: 4px 10px; border-radius: 8px; font-variant-numeric: tabular-nums; }
+  .about { display: grid; gap: 18px; grid-template-columns: 1fr; }
+  @media (min-width: 860px) { .about { grid-template-columns: 1fr 1fr; } }
+  .about h2 { font-size: 20px; margin: 0 0 8px; }
+  .about p, .about li { color: var(--muted); font-size: 15px; }
+  .about ul { padding-left: 20px; margin: 8px 0 0; }
+  footer { color: var(--muted); font-size: 13px; padding: 10px 0 36px; }
+  .hidden { display: none !important; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="/" aria-label="Anya home">
+      <svg viewBox="0 0 64 64" aria-hidden="true">
+        <path d="M4 32C12 18 22 12 32 12s20 6 28 20c-8 14-18 20-28 20S12 46 4 32z" fill="#008751"/>
+        <circle cx="32" cy="32" r="12" fill="#fff"/>
+        <circle cx="32" cy="32" r="6" fill="#14181c"/>
+        <path d="M2 10V2h8M54 2h8v8M62 54v8h-8M10 62H2v-8" fill="none" stroke="#008751" stroke-width="3" stroke-linecap="round"/>
+      </svg>
+      <span><b>Anya</b><small>Igbo for “eyes” · eyes on the road</small></span>
+    </a>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="hero">
+    <h1>See every road user in a photo, a video or a live camera.</h1>
+    <p>Anya marks cars, pedestrians, cyclists and large vehicles with the detector trained in this MSc study, and can switch to a general road model that also knows motorcycles, riders, buses and bicycles.</p>
+  </section>
+
+  <section class="card" aria-label="Detect">
+    <div class="tabs" role="tablist">
+      <button role="tab" id="tab-file" aria-selected="true" aria-controls="panel-file">Photo or video</button>
+      <button role="tab" id="tab-live" aria-selected="false" aria-controls="panel-live">Live camera</button>
+    </div>
+
+    <div class="controls">
+      <div>
+        <p class="label">Model</p>
+        <div class="seg" id="models">
+          <button type="button" data-model="study" aria-pressed="true">Study model</button>
+          <button type="button" data-model="general" aria-pressed="false">General road model</button>
+          <button type="button" data-model="both" aria-pressed="false" id="both-btn">Compare both</button>
+        </div>
+        <p class="model-note" id="model-note"></p>
+      </div>
+      <div>
+        <p class="label"><label for="conf">Confidence threshold</label></p>
+        <div class="slider">
+          <input id="conf" type="range" min="0.10" max="0.90" step="0.05" value="0.25">
+          <output id="conf-out" for="conf">0.25</output>
+        </div>
+        <p class="model-note">Lower finds more objects but makes more mistakes.</p>
+      </div>
+    </div>
+
+    <div id="panel-file" role="tabpanel" aria-labelledby="tab-file" style="margin-top:18px">
+      <label class="drop" id="drop" tabindex="0">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>
+        <strong>Drop a photo or video here, or choose a file</strong>
+        <span id="limits">JPG, PNG or WebP photos · MP4, MOV or WebM videos up to 60 seconds</span>
+        <input id="file" class="sr" type="file" accept="image/*,video/*">
+      </label>
+      <div class="preview" id="preview">
+        <img id="prev-img" alt="" class="hidden">
+        <video id="prev-vid" muted playsinline class="hidden"></video>
+        <div class="meta" id="prev-meta"></div>
+      </div>
+      <div class="actions">
+        <button class="btn" id="go" disabled>Detect</button>
+        <div class="bar" id="bar"><i></i></div>
+        <span class="status" id="status" aria-live="polite"></span>
+      </div>
+      <div class="error" id="error" role="alert"></div>
+    </div>
+
+    <div id="panel-live" role="tabpanel" aria-labelledby="tab-live" class="hidden" style="margin-top:18px">
+      <div class="actions" style="margin-top:0">
+        <button class="btn" id="cam-start">Start camera</button>
+        <button class="btn ghost hidden" id="cam-stop">Stop</button>
+        <span class="status" id="cam-status">The camera image is sent to Anya a few times a second and is not stored.</span>
+      </div>
+      <div class="live-stage" id="stage">
+        <video id="cam" playsinline muted></video>
+        <canvas id="overlay"></canvas>
+        <div class="live-hud" id="hud">–</div>
+      </div>
+      <div class="chips" id="live-chips"></div>
+      <div class="error" id="cam-error" role="alert"></div>
+    </div>
+  </section>
+
+  <section id="out" class="hidden" aria-label="Results">
+    <div class="results" id="results"></div>
+  </section>
+
+  <section class="card" aria-label="Colours">
+    <p class="label">Colours</p>
+    <div class="legend" id="legend"></div>
+  </section>
+
+  <section class="card about">
+    <div>
+      <h2>How Anya sees</h2>
+      <p>The <strong>study model</strong> is a YOLO11s detector fine-tuned on the KITTI benchmark, 7,481 road images recorded from a car in Karlsruhe, Germany. It looks for the four classes of the study: cars (with vans), pedestrians, cyclists and large vehicles (trucks and trams). On KITTI's validation images it reached an mAP@0.5 of 0.685 over these classes, and it runs in about 2 ms per image on an NVIDIA L4 GPU.</p>
+      <p>The <strong>general road model</strong> is a YOLO11m pretrained on the COCO dataset and not trained on KITTI. It knows motorcycles, buses, bicycles, traffic lights and stop signs as well, and Anya labels a person sitting on a motorcycle or bicycle as a rider.</p>
+    </div>
+    <div>
+      <h2>Good to know</h2>
+      <ul>
+        <li>The study model learned from German streets seen from a car. On Nigerian roads it has never seen okadas, kekes or danfos, so it may miss them or give them the nearest class it knows.</li>
+        <li>Camera height matters: footage from a car or a pedestrian's eye level works far better than drone or rooftop views.</li>
+        <li>Detections are not perfect. A score next to each box shows how confident the model is.</li>
+        <li>Nothing you upload is kept: each file is deleted as soon as the result has been sent.</li>
+      </ul>
+    </div>
+  </section>
+</main>
+
+<footer class="wrap">
+  Anya is the demonstration for the MSc study “Real-Time Object Detection for Autonomous Vehicle Perception”, University of Lagos, 2026. It is not part of the study's pre-registered evaluation.
+</footer>
+
+<script>
+(function () {
+  "use strict";
+  let INFO = /*ANYA_INFO*/null;
+  const $ = (id) => document.getElementById(id);
+  const state = { model: "study", file: null, kind: null, busy: false, live: false };
+
+  function el(tag, attrs, text) {
+    const e = document.createElement(tag);
+    if (attrs) for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+    if (text != null) e.textContent = text;
+    return e;
+  }
+  const colour = (name) => (INFO && INFO.colours[name]) || "#888";
+
+  function chips(container, counts, emptyText) {
+    container.replaceChildren();
+    const entries = Object.entries(counts || {});
+    if (!entries.length) { container.append(el("span", { class: "chip none" }, emptyText || "Nothing found")); return; }
+    for (const [name, n] of entries) {
+      const c = el("span", { class: "chip" });
+      const sw = el("i"); sw.style.background = colour(name);
+      c.append(sw, document.createTextNode(`${name} ${n}`));
+      container.append(c);
+    }
+  }
+
+  function legend() {
+    const box = $("legend"); box.replaceChildren();
+    const keys = state.model === "both" ? ["study", "general"] : [state.model];
+    const seen = new Set();
+    for (const k of keys) for (const name of INFO.models[k].classes) {
+      if (seen.has(name)) continue; seen.add(name);
+      const s = el("span"); const sw = el("i"); sw.style.background = colour(name);
+      s.append(sw, document.createTextNode(name)); box.append(s);
+    }
+  }
+
+  function modelNote() {
+    const n = $("model-note");
+    if (state.model === "both") n.textContent = "Runs both models on the same photo, side by side (photos only).";
+    else n.textContent = `${INFO.models[state.model].detail}. Finds: ${INFO.models[state.model].classes.join(", ")}.`;
+  }
+
+  function setModel(m) {
+    if (m === "both" && (state.kind === "video" || state.live)) return;
+    state.model = m;
+    for (const b of $("models").querySelectorAll("button")) b.setAttribute("aria-pressed", String(b.dataset.model === m));
+    modelNote(); legend();
+  }
+
+  function updateBoth() {
+    const disable = state.kind === "video" || state.live;
+    $("both-btn").disabled = disable;
+    if (disable && state.model === "both") setModel("study");
+  }
+
+  function showError(id, msg) { const e = $(id); e.textContent = msg || ""; e.classList.toggle("show", !!msg); }
+  function setBusy(on, text, determinate) {
+    state.busy = on;
+    $("go").disabled = on || !state.file;
+    const bar = $("bar"); bar.classList.toggle("show", on); bar.classList.toggle("busy", on && !determinate);
+    if (!on || !determinate) bar.querySelector("i").style.width = "";
+    $("status").textContent = text || "";
+  }
+
+  function kindOf(file) {
+    const t = (file.type || "").toLowerCase(); const n = file.name.toLowerCase();
+    if (t.startsWith("video/") || /\.(mp4|mov|m4v|webm|avi|mkv|3gp)$/.test(n)) return "video";
+    if (t.startsWith("image/") || /\.(jpe?g|png|webp|bmp)$/.test(n)) return "photo";
+    return null;
+  }
+
+  function pick(file) {
+    showError("error", "");
+    if (!file) return;
+    const kind = kindOf(file);
+    if (/\.(heic|heif)$/i.test(file.name) || /heic|heif/i.test(file.type)) { showError("error", "HEIC photos cannot be read here. Please share the photo as JPG."); return; }
+    if (!kind) { showError("error", "Please choose a photo (JPG, PNG, WebP) or a video (MP4, MOV, WebM)."); return; }
+    if (file.size > INFO.max_upload_mb * 1024 * 1024) { showError("error", `Files up to ${INFO.max_upload_mb} MB, please.`); return; }
+    state.file = file; state.kind = kind; updateBoth();
+    const url = URL.createObjectURL(file);
+    $("prev-img").classList.toggle("hidden", kind !== "photo");
+    $("prev-vid").classList.toggle("hidden", kind !== "video");
+    if (kind === "photo") $("prev-img").src = url; else { $("prev-vid").src = url; }
+    const mb = (file.size / 1048576).toFixed(1);
+    $("prev-meta").textContent = `${file.name} · ${mb} MB · ${kind === "video" ? `video (the first ${INFO.max_video_seconds} s are used)` : "photo"}`;
+    $("preview").classList.add("show");
+    $("go").disabled = false;
+    $("status").textContent = "";
+  }
+
+  function upload(url, form, responseType, onDone) {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", url);
+    xhr.responseType = responseType;
+    xhr.upload.onprogress = (e) => {
+      if (!e.lengthComputable) return;
+      const p = Math.round(100 * e.loaded / e.total);
+      $("bar").classList.remove("busy");
+      $("bar").querySelector("i").style.width = p + "%";
+      $("status").textContent = p < 100 ? `Uploading… ${p}%` : "Anya is looking…";
+      if (p >= 100) $("bar").classList.add("busy");
+    };
+    xhr.onerror = () => onDone(new Error("The connection failed. Please try again."));
+    xhr.onload = async () => {
+      if (xhr.status >= 200 && xhr.status < 300) return onDone(null, xhr);
+      let msg = `Something went wrong (${xhr.status}).`;
+      try {
+        const body = responseType === "blob" ? JSON.parse(await xhr.response.text()) : xhr.response;
+        if (body && body.detail) msg = typeof body.detail === "string" ? body.detail : msg;
+      } catch (_) { /* keep the generic message */ }
+      onDone(new Error(msg));
+    };
+    xhr.send(form);
+  }
+
+  function renderPhoto(data) {
+    const box = $("results"); box.replaceChildren();
+    box.classList.toggle("two", data.results.length > 1);
+    for (const r of data.results) {
+      const card = el("article", { class: "card result" });
+      card.append(el("h3", null, r.title), el("div", { class: "sub" }, `${r.detail} · ${r.milliseconds} ms`));
+      const img = el("img", { alt: `${r.title}: ${r.detections} detections` }); img.src = r.image; card.append(img);
+      const c = el("div", { class: "chips" }); chips(c, r.counts); card.append(c);
+      box.append(card);
+    }
+    $("out").classList.remove("hidden");
+    $("out").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function renderVideo(blob, summary) {
+    const box = $("results"); box.replaceChildren(); box.classList.remove("two");
+    const card = el("article", { class: "card result" });
+    card.append(el("h3", null, summary.title),
+      el("div", { class: "sub" }, `${summary.detail} · ${summary.frames} frames (${summary.video_seconds} s) in ${summary.processing_seconds} s, ${summary.frames_per_second} frames a second`));
+    const url = URL.createObjectURL(blob);
+    const v = el("video", { controls: "", playsinline: "", muted: "", loop: "", autoplay: "" }); v.src = url; v.muted = true;
+    card.append(v);
+    const actions = el("div", { class: "actions" });
+    const a = el("a", { class: "btn ghost", href: url, download: "anya.mp4" }, "Download video");
+    actions.append(a); card.append(actions);
+    const t = el("table", { class: "stats" });
+    const head = el("tr"); head.append(el("th", null, "Class"), el("th", { class: "n" }, "Most at once"), el("th", { class: "n" }, "Average per frame"));
+    t.append(head);
+    const rows = Object.entries(summary.classes || {});
+    if (!rows.length) { const tr = el("tr"); const td = el("td", { colspan: "3" }, "Nothing found at this threshold."); tr.append(td); t.append(tr); }
+    for (const [name, s] of rows) {
+      const tr = el("tr"); const td = el("td"); const sw = el("i", { class: "" });
+      sw.style.cssText = `display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:8px;background:${colour(name)}`;
+      td.append(sw, document.createTextNode(name));
+      tr.append(td, el("td", { class: "n" }, String(s.max_in_frame)), el("td", { class: "n" }, s.per_frame.toFixed(2)));
+      t.append(tr);
+    }
+    card.append(t);
+    if (summary.truncated) card.append(el("p", { class: "foot-note" }, `Only the first ${INFO.max_video_seconds} seconds were processed.`));
+    box.append(card);
+    $("out").classList.remove("hidden");
+    $("out").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function detect() {
+    if (!state.file || state.busy) return;
+    showError("error", "");
+    const form = new FormData();
+    form.append("file", state.file, state.file.name);
+    form.append("model", state.model);
+    form.append("conf", $("conf").value);
+    setBusy(true, "Uploading…", true);
+    if (state.kind === "photo") {
+      upload("/api/photo", form, "json", (err, xhr) => {
+        setBusy(false, err ? "" : "Done.");
+        if (err) return showError("error", err.message);
+        renderPhoto(xhr.response);
+      });
+    } else {
+      upload("/api/video", form, "blob", (err, xhr) => {
+        setBusy(false, err ? "" : "Done.");
+        if (err) return showError("error", err.message);
+        let summary = {};
+        try { summary = JSON.parse(xhr.getResponseHeader("X-Anya-Summary") || "{}"); } catch (_) { /* none */ }
+        renderVideo(xhr.response, summary);
+      });
+    }
+  }
+
+  // ---- live camera
+  let stream = null, loopOn = false, lastT = 0, fpsAvg = 0;
+  const grab = document.createElement("canvas");
+
+  async function camStart() {
+    showError("cam-error", "");
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { showError("cam-error", "This browser cannot open the camera here."); return; }
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 } }, audio: false });
+    } catch (e) { showError("cam-error", "The camera could not be opened. Please allow camera access and try again."); return; }
+    const v = $("cam"); v.srcObject = stream; await v.play();
+    state.live = true; updateBoth();
+    $("stage").classList.add("show"); $("cam-start").classList.add("hidden"); $("cam-stop").classList.remove("hidden");
+    loopOn = true; lastT = performance.now(); fpsAvg = 0; tick();
+  }
+
+  function camStop() {
+    loopOn = false; state.live = false; updateBoth();
+    if (stream) for (const t of stream.getTracks()) t.stop();
+    stream = null;
+    $("stage").classList.remove("show"); $("cam-start").classList.remove("hidden"); $("cam-stop").classList.add("hidden");
+    const o = $("overlay"); o.getContext("2d").clearRect(0, 0, o.width, o.height);
+    $("live-chips").replaceChildren();
+  }
+
+  function drawBoxes(res) {
+    const v = $("cam"), o = $("overlay");
+    const W = v.clientWidth, H = v.clientHeight, dpr = window.devicePixelRatio || 1;
+    o.width = Math.round(W * dpr); o.height = Math.round(H * dpr);
+    const g = o.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, H);
+    const sx = W / res.width, sy = H / res.height;
+    g.lineWidth = 3; g.font = "600 14px system-ui, sans-serif"; g.textBaseline = "top";
+    for (const d of res.detections) {
+      const [x1, y1, x2, y2] = d.box; const c = colour(d.name);
+      g.strokeStyle = c; g.strokeRect(x1 * sx, y1 * sy, (x2 - x1) * sx, (y2 - y1) * sy);
+      const label = `${d.name} ${d.conf.toFixed(2)}`; const tw = g.measureText(label).width + 10;
+      const ty = y1 * sy - 20 >= 0 ? y1 * sy - 20 : y1 * sy;
+      g.fillStyle = c; g.fillRect(x1 * sx, ty, tw, 20);
+      g.fillStyle = d.name === "Bicycle" ? "#191919" : "#fff"; g.fillText(label, x1 * sx + 5, ty + 3);
+    }
+  }
+
+  function tick() {
+    if (!loopOn) return;
+    const v = $("cam");
+    if (!v.videoWidth) { requestAnimationFrame(tick); return; }
+    const scale = Math.min(1, 960 / v.videoWidth);
+    grab.width = Math.round(v.videoWidth * scale); grab.height = Math.round(v.videoHeight * scale);
+    grab.getContext("2d").drawImage(v, 0, 0, grab.width, grab.height);
+    grab.toBlob((blob) => {
+      if (!loopOn || !blob) return;
+      const form = new FormData();
+      form.append("file", blob, "frame.jpg"); form.append("model", state.model === "both" ? "study" : state.model); form.append("conf", $("conf").value);
+      fetch("/api/frame", { method: "POST", body: form })
+        .then((r) => r.ok ? r.json() : r.json().then((b) => Promise.reject(new Error(b.detail || r.status))))
+        .then((res) => {
+          if (!loopOn) return;
+          drawBoxes(res); chips($("live-chips"), res.counts, "Nothing in view");
+          const now = performance.now(); const fps = 1000 / Math.max(1, now - lastT); lastT = now;
+          fpsAvg = fpsAvg ? 0.8 * fpsAvg + 0.2 * fps : fps;
+          $("hud").textContent = `${fpsAvg.toFixed(1)} frames/s · model ${res.milliseconds} ms`;
+          tick();
+        })
+        .catch((e) => { showError("cam-error", `Live detection stopped: ${e.message}`); camStop(); });
+    }, "image/jpeg", 0.8);
+  }
+
+  // ---- wiring
+  function tab(which) {
+    const live = which === "live";
+    $("tab-file").setAttribute("aria-selected", String(!live)); $("tab-live").setAttribute("aria-selected", String(live));
+    $("panel-file").classList.toggle("hidden", live); $("panel-live").classList.toggle("hidden", !live);
+    if (!live && state.live) camStop();
+    if (live && state.model === "both") setModel("study");
+    $("both-btn").disabled = live || state.kind === "video";
+  }
+
+  async function init() {
+    if (!INFO) { try { INFO = await (await fetch("/api/info")).json(); } catch (_) { showError("error", "Anya could not be reached."); return; } }
+    $("limits").textContent = `JPG, PNG or WebP photos · MP4, MOV or WebM videos up to ${INFO.max_video_seconds} seconds · up to ${INFO.max_upload_mb} MB`;
+    for (const b of $("models").querySelectorAll("button")) b.addEventListener("click", () => setModel(b.dataset.model));
+    $("conf").addEventListener("input", () => { $("conf-out").textContent = Number($("conf").value).toFixed(2); });
+    $("file").addEventListener("change", (e) => pick(e.target.files[0]));
+    const drop = $("drop");
+    drop.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $("file").click(); } });
+    ["dragenter", "dragover"].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.add("over"); }));
+    ["dragleave", "drop"].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.remove("over"); }));
+    drop.addEventListener("drop", (e) => { if (e.dataTransfer.files.length) pick(e.dataTransfer.files[0]); });
+    $("go").addEventListener("click", detect);
+    $("tab-file").addEventListener("click", () => tab("file"));
+    $("tab-live").addEventListener("click", () => tab("live"));
+    $("cam-start").addEventListener("click", camStart);
+    $("cam-stop").addEventListener("click", camStop);
+    setModel("study");
+  }
+  init();
+})();
+</script>
+</body>
+</html>
